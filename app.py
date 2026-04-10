@@ -1,44 +1,38 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from environment import ComplianceAuditorEnv
-from models import Action, TaskDifficulty, Observation
+from models import Action, TaskDifficulty
 import uuid
 
 app = FastAPI()
 sessions = {}
 
-class ResetRequest(BaseModel):
-    difficulty: str = "easy"
-
-class StepRequest(BaseModel):
-    session_id: str
-    action: Action
-
-# --- NEW HTML landing page ---
+# --- HTML landing page (optional) ---
 @app.get("/", response_class=HTMLResponse)
 def root():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head><title>Compliance Auditor</title><meta charset="UTF-8"></head>
-    <body style="font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem;">
-        <h1>🛡️ Compliance Auditor Environment</h1>
-        <p>OpenEnv environment for GDPR/CCPA compliance auditing.</p>
-        <h2>Endpoints</h2>
-        <ul><li><code>POST /reset</code></li><li><code>POST /step</code></li><li><code>GET /state/{session_id}</code></li></ul>
-        <h2>Test with PowerShell</h2>
-        <pre style="background:#f4f4f4;padding:1rem;">$body = '{"difficulty":"easy"}'
-Invoke-RestMethod -Uri "https://xcoder18-project1.hf.space/reset" -Method Post -ContentType "application/json" -Body $body</pre>
-        <p><a href="https://huggingface.co/spaces/xcoder18/project1/blob/main/README.md">Full documentation</a></p>
-    </body>
-    </html>
-    """
-# --- Existing endpoints ---
+    return """<html><body><h1>Compliance Auditor</h1><p>API endpoints: POST/GET /reset, POST /step, GET /state/{id}</p></body></html>"""
+
+# --- Reset: works with GET (query param) or POST (body or empty) ---
+@app.get("/reset")
+async def reset_get(difficulty: str = Query("easy")):
+    return await reset_logic(difficulty)
+
 @app.post("/reset")
-def reset(req: ResetRequest):
+async def reset_post(request: Request):
+    difficulty = "easy"
     try:
-        diff = TaskDifficulty(req.difficulty)
+        body = await request.body()
+        if body:
+            data = await request.json()
+            difficulty = data.get("difficulty", "easy")
+    except:
+        pass
+    return await reset_logic(difficulty)
+
+async def reset_logic(difficulty: str):
+    try:
+        diff = TaskDifficulty(difficulty)
     except:
         raise HTTPException(400, "Invalid difficulty")
     env = ComplianceAuditorEnv(difficulty=diff)
@@ -47,19 +41,24 @@ def reset(req: ResetRequest):
     sessions[session_id] = env
     return {"session_id": session_id, "observation": obs.dict()}
 
+# --- Step: expects session_id in query param, action in body ---
+class StepAction(BaseModel):
+    action_type: str
+    clause_index: int | None = None
+    is_violation: bool | None = None
+
 @app.post("/step")
-def step(req: StepRequest):
-    env = sessions.get(req.session_id)
+async def step(action: StepAction, session_id: str = Query(...)):
+    env = sessions.get(session_id)
     if not env:
         raise HTTPException(404, "Session not found")
-    obs, reward, done, info = env.step(req.action)
-    return {
-        "observation": obs.dict(),
-        "reward": reward,
-        "done": done,
-        "info": info
-    }
+    # Convert StepAction to your Action model
+    from models import Action as ActionModel
+    act = ActionModel(action_type=action.action_type, clause_index=action.clause_index, is_violation=action.is_violation)
+    obs, reward, done, info = env.step(act)
+    return [obs.dict(), reward, done, info]
 
+# --- State endpoint ---
 @app.get("/state/{session_id}")
 def get_state(session_id: str):
     env = sessions.get(session_id)
