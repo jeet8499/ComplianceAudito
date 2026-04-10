@@ -1,0 +1,11 @@
+name: compliance-auditor-env
+version: 1.0.0
+description: Real-world compliance auditing environment
+author: Jeet Choudhari
+license: MIT
+entrypoint: app:app
+tags:
+  - compliance
+  - auditing
+  - real-world
+  - openenv
