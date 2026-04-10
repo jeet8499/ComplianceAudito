@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from environment import ComplianceAuditorEnv
 from models import Action, TaskDifficulty, Observation
@@ -14,6 +15,26 @@ class StepRequest(BaseModel):
     session_id: str
     action: Action
 
+# --- NEW HTML landing page ---
+@app.get("/", response_class=HTMLResponse)
+def root():
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head><title>Compliance Auditor</title><meta charset="UTF-8"></head>
+    <body style="font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem;">
+        <h1>🛡️ Compliance Auditor Environment</h1>
+        <p>OpenEnv environment for GDPR/CCPA compliance auditing.</p>
+        <h2>Endpoints</h2>
+        <ul><li><code>POST /reset</code></li><li><code>POST /step</code></li><li><code>GET /state/{session_id}</code></li></ul>
+        <h2>Test with PowerShell</h2>
+        <pre style="background:#f4f4f4;padding:1rem;">$body = '{"difficulty":"easy"}'
+Invoke-RestMethod -Uri "https://xcoder18-project1.hf.space/reset" -Method Post -ContentType "application/json" -Body $body</pre>
+        <p><a href="https://huggingface.co/spaces/xcoder18/project1/blob/main/README.md">Full documentation</a></p>
+    </body>
+    </html>
+    """
+# --- Existing endpoints ---
 @app.post("/reset")
 def reset(req: ResetRequest):
     try:
