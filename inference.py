@@ -1,19 +1,41 @@
+#!/usr/bin/env python3
+"""
+Compliance Auditor Agent using Groq API.
+Handles missing API key gracefully without unhandled exceptions.
+"""
+
 import os
+import sys
 import json
 from openai import OpenAI
 from environment import ComplianceAuditorEnv
 from models import TaskDifficulty, Action
 
-# Use Groq's endpoint and a current free model
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1")
-MODEL_NAME = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")   # active model
-HF_TOKEN = os.environ.get("HF_TOKEN", "")   # not needed for Groq
+# ------------------------------------------------------------------
+# Safely get the Groq API key – exit cleanly if missing
+# ------------------------------------------------------------------
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+if GROQ_API_KEY is None:
+    print("ERROR: GROQ_API_KEY environment variable is not set.")
+    print("Please set it before running inference (e.g., export GROQ_API_KEY='your_key').")
+    sys.exit(1)   # Non-zero exit, but exception is handled (no traceback)
 
-# Read the Groq API key from the environment
-client = OpenAI(
-    base_url=API_BASE_URL,
-    api_key=os.environ.get("GROQ_API_KEY")   # <-- changed from OPENAI_API_KEY
-)
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1")
+MODEL_NAME = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
+HF_TOKEN = os.environ.get("HF_TOKEN", "")   # Not used for Groq
+
+# ------------------------------------------------------------------
+# Initialize client with try/except for any other errors
+# ------------------------------------------------------------------
+try:
+    client = OpenAI(base_url=API_BASE_URL, api_key=GROQ_API_KEY)
+except Exception as e:
+    print(f"ERROR: Failed to initialize OpenAI client: {e}")
+    sys.exit(1)
+
+# ------------------------------------------------------------------
+# Core agent logic (unchanged)
+# ------------------------------------------------------------------
 def run_agent(env: ComplianceAuditorEnv, max_steps=20):
     obs = env.reset()
     done = False
@@ -36,15 +58,17 @@ Choose an action:
 - To finish: {{"action_type": "finalize"}}
 
 Respond with ONLY the JSON action."""
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0
-        )
+        
         try:
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0
+            )
             action_dict = json.loads(response.choices[0].message.content)
             action = Action(**action_dict)
-        except:
+        except Exception as e:
+            print(f"Warning: API or parsing error: {e}. Finalizing as fallback.")
             action = Action(action_type="finalize")
 
         obs, reward, done, info = env.step(action)
