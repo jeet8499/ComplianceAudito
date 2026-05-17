@@ -1,15 +1,14 @@
 # Compliance Auditor Environment
 ---
 title: Compliance Auditor Environment
-emoji: 🛡️
+---
+
+# Compliance Auditor Environment 
 colorFrom: blue
 colorTo: indigo
 sdk: docker
 app_file: app.py
 pinned: false
----
-
-# Compliance Auditor Environment
 
 Real-world OpenEnv environment for auditing documents against GDPR/CCPA.
 
